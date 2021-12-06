@@ -53,15 +53,15 @@ Then it will enter the new branch. Starting from the common root of the new Stat
 During your scene's `_process()`, XSM will update the active root and call `_on_update()`, then `_on_update()` for its active child (or children if there are regions), `_after_update()` for the child and eventually `_after_update()` for the root.
 If you add any timer to a State (with `add_timer("name",time)`) as soon as the timer is done, it calls `_on_timeout("name")` and destroys itself. If it had this timer's name already as a child, the old timer is destroyed and a new one is created with the specified time.
 
-So, in each State's script, you can implement the following abstract public functions:
+So, in each State's script, you can implement the following virtual public functions:
 ```csharp
-void _OnEnter() {}
-void _AfterEnter() {}
-void _OnUpdate(_delta) {}
-void _AfterUpdate(_delta) {}
-void _BeforeExit() {}
-void _OnExit() {}
-void _OnTimeout(_name) {}
+public override void _OnEnter() {}
+public override void _AfterEnter() {}
+public override void _OnUpdate(_delta) {}
+public override void _AfterUpdate(_delta) {}
+public override void _BeforeExit() {}
+public override void _OnExit() {}
+public override void _OnTimeout(_name) {}
 ```
 
 
