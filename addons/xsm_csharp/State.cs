@@ -93,12 +93,12 @@ public class State : Node
 
     [Export]
     public NodePath fsmOwner = null,
-                     animationPlayer = null;
+                    animationPlayer = null;
 
     public const int INACTIVE = 0,
-              ENTERING = 1,
-              ACTIVE = 2,
-              EXITING = 3;
+                     ENTERING = 1,
+                     ACTIVE = 2,
+                     EXITING = 3;
 
     public int status = INACTIVE;
     public StateRoot stateRoot = null;
@@ -135,15 +135,22 @@ public class State : Node
     {
         foreach (var c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
+            string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+
+            if (nodeType != "State")
             {
-                Godot.Node probNode = (Godot.Node)c;
-                return $"Error : this Node has a non-State child ({probNode.Name})";
+                Node pNode = (Node)c;
+                return $"Error : this Node has a non-State child ({pNode.Name} : {pNode.GetClass()} )";
             }
         }
         return "";
     }
 
+    public static bool HasMethod(object objectToCheck, string methodName)
+    {
+        var type = objectToCheck.GetType();
+        return type.GetMethod(methodName) != null;
+    }
 
     //
     // FUNCTIONS TO INHERIT
@@ -294,17 +301,11 @@ public class State : Node
         }
         else
         {
-            foreach (var c in GetChildren())
+            foreach (State c in GetChildren())
             {
-                if (c.GetType() != typeof(State))
+                if (c.status == ACTIVE)
                 {
-                    continue;
-                }
-
-                State cState = (State)c;
-                if (cState.status == ACTIVE)
-                {
-                    var result = new Godot.Collections.Array { cState };
+                    var result = new Godot.Collections.Array { c };
                     return result;
                 }
 
@@ -443,15 +444,16 @@ public class State : Node
     {
         foreach (var c in GetChildren())
         {
-            if (c.GetType() != typeof(Timer))
-            {
-                continue;
-            }
-            Timer cTimer = (Timer)c;
+            string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
 
-            cTimer.Stop();
-            cTimer.QueueFree();
-            cTimer.Name = "to_delete";
+            if (nodeType == "Timer")
+            {
+                Timer cTimer = (Timer)c;
+
+                cTimer.Stop();
+                cTimer.QueueFree();
+                cTimer.Name = "to_delete";
+            }
         }
     }
 
@@ -473,68 +475,57 @@ public class State : Node
     {
         stateRoot = newStateRoot;
 
-        foreach (var c in GetChildren())
+        foreach (State c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
+            if (dict.ContainsKey(c.Name))
             {
-                continue;
-            }
-            State cState = (State)c;
-
-            if (dict.ContainsKey(cState.Name))
-            {
-                State currState = dict[cState.Name];
+                State currState = dict[c.Name];
                 State currParent = (State)currState.GetParent();
-                dict.Remove(cState.Name);
-                dict[$"{currParent.Name}/{cState.Name}"] = currState;
-                dict[$"{this.Name}/{cState.Name}"] = cState;
-                stateRoot.duplicateNames[cState.Name] = 1;
+                dict.Remove(c.Name);
+                dict[$"{currParent.Name}/{c.Name}"] = currState;
+                dict[$"{this.Name}/{c.Name}"] = c;
+                stateRoot.duplicateNames[c.Name] = 1;
             }
-            else if (stateRoot.duplicateNames.ContainsKey(cState.Name))
+            else if (stateRoot.duplicateNames.ContainsKey(c.Name))
             {
-                dict[$"{this.Name}/{cState.Name}"] = cState;
-                stateRoot.duplicateNames[cState.Name] += 1;
+                dict[$"{this.Name}/{c.Name}"] = c;
+                stateRoot.duplicateNames[c.Name] += 1;
             }
             else
             {
-                dict[cState.Name] = cState;
+                dict[c.Name] = c;
             }
 
-            cState.InitChildrenStateMap(dict, stateRoot);
+            c.InitChildrenStateMap(dict, stateRoot);
         }
     }
 
+    // TODO: fix this StateRoot arg (should be State)
     protected void InitChildrenStates(StateRoot rootState, bool firstBranch)
     {
-        foreach (var c in GetChildren())
+        foreach (State c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
+            c.status = INACTIVE;
+            c.stateRoot = rootState;
+            if (c.target == null)
             {
-                continue;
+                c.target = rootState.target;
             }
-            State cState = (State)c;
-
-            cState.status = INACTIVE;
-            cState.stateRoot = rootState;
-            if (cState.target == null)
+            if (c.animPlayer == null)
             {
-                cState.target = rootState.target;
+                c.animPlayer = rootState.animPlayer;
             }
-            if (cState.animPlayer == null)
+            if (firstBranch && (hasRegions || (c == GetChild(0))))
             {
-                cState.animPlayer = rootState.animPlayer;
-            }
-            if (firstBranch && (hasRegions || (cState == GetChild(0))))
-            {
-                cState.status = ACTIVE;
-                cState.Enter();
-                cState.lastState = rootState;
-                cState.InitChildrenStates(rootState, true);
-                cState._AfterEnter(null);
+                c.status = ACTIVE;
+                c.Enter();
+                c.lastState = rootState;
+                c.InitChildrenStates(rootState, true);
+                c._AfterEnter(null);
             }
             else
             {
-                cState.InitChildrenStates(rootState, false);
+                c.InitChildrenStates(rootState, false);
             }
         }
     }
@@ -548,17 +539,11 @@ public class State : Node
         }
         stateInUpdate = true;
         Update(_delta);
-        foreach (var c in GetChildren())
+        foreach (State c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
+            if ((c.status == ACTIVE) && (!c.doneForThisFrame))
             {
-                continue;
-            }
-            State cState = (State)c;
-
-            if ((cState.status == ACTIVE) && (!cState.doneForThisFrame))
-            {
-                cState.UpdateActiveStates(_delta);
+                c.UpdateActiveStates(_delta);
             }
         }
         _AfterUpdate(_delta);
@@ -571,15 +556,9 @@ public class State : Node
         doneForThisFrame = newDone;
         if (!IsAtomic())
         {
-            foreach (var c in GetChildren())
+            foreach (State c in GetChildren())
             {
-                if (c.GetType() != typeof(State))
-                {
-                    continue;
-                }
-                State cState = (State)c;
-
-                cState.ResetDoneThisFrame(newDone);
+                c.ResetDoneThisFrame(newDone);
             }
         }
     }
@@ -623,15 +602,9 @@ public class State : Node
 
     void SetDisabledChildren(bool newDisabled)
     {
-        foreach (var c in GetChildren())
+        foreach (State c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
-            {
-                continue;
-            }
-            State cState = (State)c;
-
-            cState.SetDisabled(newDisabled);
+            c.SetDisabled(newDisabled);
         }
     }
 
@@ -662,15 +635,10 @@ public class State : Node
     {
         if (hasRegions)
         {
-            foreach (var c in GetChildren())
+            foreach (State c in GetChildren())
             {
-                if (c.GetType() != typeof(State))
-                {
-                    continue;
-                }
-                State cState = (State)c;
-                cState.status = ENTERING;
-                cState.ChangeChildrenStatusToEntering(newStatePath);
+                c.status = ENTERING;
+                c.ChangeChildrenStatusToEntering(newStatePath);
                 return;
             }
         }
@@ -679,19 +647,13 @@ public class State : Node
         int currentLvl = GetPath().GetNameCount();
         if (newStateLvl > currentLvl)
         {
-            foreach (var c in GetChildren())
+            foreach (State c in GetChildren())
             {
-                if (c.GetType() != typeof(State))
-                {
-                    continue;
-                }
-                State cState = (State)c;
-
                 string currentName = newStatePath.GetName(currentLvl);
-                if (cState.Name == currentName)
+                if (c.Name == currentName)
                 {
-                    cState.status = ENTERING;
-                    cState.ChangeChildrenStatusToEntering(newStatePath);
+                    c.status = ENTERING;
+                    c.ChangeChildrenStatusToEntering(newStatePath);
                 }
             }
         }
@@ -699,13 +661,9 @@ public class State : Node
         {
             if (GetChildCount() > 0)
             {
-                if (GetChild(0).GetType() == typeof(State))
-                {
-                    State c = (State)GetChild(0);
-                    c.status = ENTERING;
-                    c.ChangeChildrenStatusToEntering(newStatePath);
-                }
-
+                State c = (State)GetChild(0);
+                c.status = ENTERING;
+                c.ChangeChildrenStatusToEntering(newStatePath);
             }
         }
     }
@@ -722,35 +680,23 @@ public class State : Node
         // else newstate's path smaller than here, enter first child
         if (hasRegions)
         {
-            foreach (var c in GetChildren())
+            foreach (State c in GetChildren())
             {
-                if (c.GetType() != typeof(State))
-                {
-                    continue;
-                }
-                State cState = (State)c;
-
-                cState.Enter(argsOnEnter);
-                cState.EnterChildren(argsOnEnter, argsAfterEnter);
-                cState._AfterEnter(argsAfterEnter);
+                c.Enter(argsOnEnter);
+                c.EnterChildren(argsOnEnter, argsAfterEnter);
+                c._AfterEnter(argsAfterEnter);
             }
             return;
 
         }
 
-        foreach (var c in GetChildren())
+        foreach (State c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
+            if (c.status == ENTERING)
             {
-                continue;
-            }
-            State cState = (State)c;
-
-            if (cState.status == ENTERING)
-            {
-                cState.Enter(argsOnEnter);
-                cState.EnterChildren(argsOnEnter, argsAfterEnter);
-                cState._AfterEnter(argsAfterEnter);
+                c.Enter(argsOnEnter);
+                c.EnterChildren(argsOnEnter, argsAfterEnter);
+                c._AfterEnter(argsAfterEnter);
             }
         }
     }
@@ -774,30 +720,20 @@ public class State : Node
     {
         if (hasRegions)
         {
-            foreach (var c in GetChildren())
+            foreach (State c in GetChildren())
             {
-                if (c.GetType() != typeof(State))
-                {
-                    continue;
-                }
-                State cState = (State)c;
-                cState.status = EXITING;
-                cState.ChangeChildrenStatusToExiting();
+                c.status = EXITING;
+                c.ChangeChildrenStatusToExiting();
             }
         }
         else
         {
-            foreach (var c in GetChildren())
+            foreach (State c in GetChildren())
             {
-                if (c.GetType() != typeof(State))
+                if (c.status != INACTIVE)
                 {
-                    continue;
-                }
-                State cState = (State)c;
-                if (cState.status != INACTIVE)
-                {
-                    cState.status = EXITING;
-                    cState.ChangeChildrenStatusToExiting();
+                    c.status = EXITING;
+                    c.ChangeChildrenStatusToExiting();
                 }
             }
         }
@@ -806,19 +742,13 @@ public class State : Node
 
     void ExitChildren(string argsBeforeExit = null, string argsOnExit = null)
     {
-        foreach (var c in GetChildren())
+        foreach (State c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
+            if (c.status == EXITING)
             {
-                continue;
-            }
-            State cState = (State)c;
-
-            if (cState.status == EXITING)
-            {
-                cState._BeforeExit(argsBeforeExit);
-                cState.ExitChildren();
-                cState.Exit(argsOnExit);
+                c._BeforeExit(argsBeforeExit);
+                c.ExitChildren();
+                c.Exit(argsOnExit);
             }
         }
     }
@@ -826,16 +756,10 @@ public class State : Node
 
     void ResetChildrenStatus()
     {
-        foreach (var c in GetChildren())
+        foreach (State c in GetChildren())
         {
-            if (c.GetType() != typeof(State))
-            {
-                continue;
-            }
-            State cState = (State)c;
-
-            cState.status = INACTIVE;
-            cState.ResetChildrenStatus();
+            c.status = INACTIVE;
+            c.ResetChildrenStatus();
         }
     }
 
@@ -876,8 +800,7 @@ public class State : Node
     }
 
 
-    // unused
-    string GetClass()
+    new public string GetClass()
     {
         return "State";
     }
