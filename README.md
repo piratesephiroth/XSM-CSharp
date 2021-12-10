@@ -1,6 +1,6 @@
 # XSM-CSharp
-A C# port of Etienne Blanc's [XSM plugin](https://gitlab.com/atnb/xsm) for the Godot Engine
-
+A tentative C# port of Etienne Blanc's [XSM plugin](https://gitlab.com/atnb/xsm) for the Godot Engine
+Doesn't work at the moment, I"m not sure if it ever will
 
 
 XSM Extended State Machine
