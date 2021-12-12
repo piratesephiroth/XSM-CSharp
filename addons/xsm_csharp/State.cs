@@ -102,7 +102,7 @@ public class State : Node
 
     public int status = INACTIVE;
     public StateRoot stateRoot = null;
-    public Godot.Node target = null;
+    public Node target = null;
 
     AnimationPlayer animPlayer = null;
     State lastState = null;
@@ -501,12 +501,18 @@ public class State : Node
     }
 
     // TODO: fix this StateRoot arg (should be State)
-    protected void InitChildrenStates(StateRoot rootState, bool firstBranch)
+    protected void InitChildrenStates(State rootState, bool firstBranch)
     {
         foreach (State c in GetChildren())
         {
+            string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+            if (nodeType != "State")
+            {
+                continue;
+            }
+
             c.status = INACTIVE;
-            c.stateRoot = rootState;
+            c.stateRoot = (StateRoot)rootState;
             if (c.target == null)
             {
                 c.target = rootState.target;
@@ -541,7 +547,8 @@ public class State : Node
         Update(_delta);
         foreach (State c in GetChildren())
         {
-            if ((c.status == ACTIVE) && (!c.doneForThisFrame))
+            string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+            if ((nodeType == "State") && (c.status == ACTIVE) && (!c.doneForThisFrame))
             {
                 c.UpdateActiveStates(_delta);
             }
@@ -558,7 +565,11 @@ public class State : Node
         {
             foreach (State c in GetChildren())
             {
-                c.ResetDoneThisFrame(newDone);
+                string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+                if (nodeType == "State")
+                {
+                    c.ResetDoneThisFrame(newDone);
+                }
             }
         }
     }
@@ -649,8 +660,9 @@ public class State : Node
         {
             foreach (State c in GetChildren())
             {
+                string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
                 string currentName = newStatePath.GetName(currentLvl);
-                if (c.Name == currentName)
+                if ((nodeType == "State") && (c.Name == currentName))
                 {
                     c.status = ENTERING;
                     c.ChangeChildrenStatusToEntering(newStatePath);
@@ -662,8 +674,12 @@ public class State : Node
             if (GetChildCount() > 0)
             {
                 State c = (State)GetChild(0);
-                c.status = ENTERING;
-                c.ChangeChildrenStatusToEntering(newStatePath);
+                string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+                if (nodeType == "State")
+                {
+                    c.status = ENTERING;
+                    c.ChangeChildrenStatusToEntering(newStatePath);
+                }
             }
         }
     }
@@ -675,24 +691,11 @@ public class State : Node
         {
             return;
         }
-        // if hasregions, enter all children and that's all
-        // if newstate's path tall enough, enter child that fits newstate's current lvl
-        // else newstate's path smaller than here, enter first child
-        if (hasRegions)
-        {
-            foreach (State c in GetChildren())
-            {
-                c.Enter(argsOnEnter);
-                c.EnterChildren(argsOnEnter, argsAfterEnter);
-                c._AfterEnter(argsAfterEnter);
-            }
-            return;
-
-        }
-
+        // enter all ENTERING substates
         foreach (State c in GetChildren())
         {
-            if (c.status == ENTERING)
+            string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+            if ((nodeType == "State") && (c.status == ENTERING))
             {
                 c.Enter(argsOnEnter);
                 c.EnterChildren(argsOnEnter, argsAfterEnter);
@@ -730,7 +733,8 @@ public class State : Node
         {
             foreach (State c in GetChildren())
             {
-                if (c.status != INACTIVE)
+                string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+                if ((nodeType == "State") && (c.status != INACTIVE))
                 {
                     c.status = EXITING;
                     c.ChangeChildrenStatusToExiting();
@@ -744,7 +748,8 @@ public class State : Node
     {
         foreach (State c in GetChildren())
         {
-            if (c.status == EXITING)
+            string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+            if ((nodeType == "State") && (c.status == EXITING))
             {
                 c._BeforeExit(argsBeforeExit);
                 c.ExitChildren();
@@ -758,8 +763,12 @@ public class State : Node
     {
         foreach (State c in GetChildren())
         {
-            c.status = INACTIVE;
-            c.ResetChildrenStatus();
+            string nodeType = (string)c.GetType().GetMethod("GetClass").Invoke(c, null);
+            if (nodeType != "State")
+            {
+                c.status = INACTIVE;
+                c.ResetChildrenStatus();
+            }
         }
     }
 
@@ -814,6 +823,11 @@ public class State : Node
 
     bool IsRoot()
     {
+        if (this.IsRoot())
+        {
+            return true;
+        }
+
         return false;
     }
 }
